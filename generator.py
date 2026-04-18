@@ -489,23 +489,32 @@ class CToLuauFFI:
     def _parse_functions(self, content: str) -> None:
         """Parse function declarations and definitions"""
         # Match function declarations and definitions (ending with ; or {)
-        func_pattern = r'(\w+(?:\s*\*)?)\s+(\w+)\s*\(([^)]*)\)\s*[;{]'
+        func_pattern = r'([A-Za-z_][A-Za-z0-9_\s\*]*?)\s*\b([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*[;{]'
 
         for match in re.finditer(func_pattern, content):
             return_type, func_name, params = match.groups()
 
-            # Skip if it looks like a struct field or doesn't look like a function
-            if '{' in return_type or not func_name or func_name in ['if', 'while', 'for'] or '...' in params:
+            # Skip if it's a typedef or control structure
+            if 'typedef' in return_type or not func_name or func_name in ['if', 'while', 'for', 'switch', 'return'] or '...' in params:
                 continue
 
-            # Skip if return_type contains keywords that indicate not a function
-            if any(keyword in return_type for keyword in ['struct', 'enum', 'union', 'typedef']):
+            return_type = return_type.strip()
+
+            # Strip common macros or decorators
+            return_type = re.sub(r'\b[A-Z_][A-Z0-9_]*API\b', '', return_type)
+            return_type = re.sub(r'__declspec\([^)]*\)', '', return_type)
+            return_type = re.sub(r'\bextern\s+"C"\b', '', return_type)
+            return_type = re.sub(r'\b(?:extern|static|inline)\b', '', return_type)
+
+            return_type = return_type.strip()
+
+            if not return_type:
                 continue
 
             parameters = self._parse_parameters(params)
             self.functions[func_name] = Function(
                 name=func_name,
-                return_type=return_type.strip(),
+                return_type=return_type,
                 parameters=parameters
             )
     
